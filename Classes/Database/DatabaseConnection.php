@@ -200,7 +200,7 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 		$matches = array();
 		if (preg_match('/^\s*#\s*@tables_used\s*=\s*(.*)\s*;/msU', $query, $matches)) {
 			$tableNames = GeneralUtility::trimExplode(',', $matches[1]);
-		} elseif (preg_match('/^(CREATE|ALTER) TABLE\s+([^\s]+)\s+/msU', $query, $matches)) {
+		} elseif (preg_match('/^(CREATE\s+TABLE|ALTER\s+TABLE|INSERT\s+INTO)\s+([^\s]+)(\s+|\()/msU', $query, $matches)) {
 			$tableNames = array($matches[2]);
 		} else {
 			// no luck, we need to parse the query
