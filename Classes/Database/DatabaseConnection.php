@@ -54,6 +54,11 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 	);
 
 	/**
+	 * @var bool
+	 */
+	protected $debugSQLParsing = TRUE;
+
+	/**
 	 * Initialize the database connection
 	 *
 	 * @return void
@@ -199,7 +204,9 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 			$tableNames = array($matches[2]);
 		} else {
 			// no luck, we need to parse the query
-			//$time_start = microtime(true);
+			if ($this->debugSQLParsing) {
+				$time_start = microtime(true);
+			}
 
 			$parser = new Parser($query, false);
 
@@ -216,12 +223,24 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 				}
 			}
 
-			//$time_end = microtime(true);
-			//$time = $time_end - $time_start;
-			//error_log("$time took to parse query: $query");
+			if ($this->debugSQLParsing) {
+				$time_end = microtime(true);
+				$time = $time_end - $time_start;
+				$this->getLogger()->log(\TYPO3\CMS\Core\Log\LogLevel::DEBUG, "$time took to parse query: $query");
+			}
 		}
 
 		return $tableNames;
+	}
+
+	/**
+	 * @return \TYPO3\CMS\Core\Log\Logger
+	 */
+	protected function getLogger() {
+		/** @var $logManager \TYPO3\CMS\Core\Log\LogManager */
+		$logManager = GeneralUtility::makeInstance('TYPO3\\CMS\\Core\\Log\\LogManager');
+
+		return $logManager->getLogger(get_class($this));
 	}
 
 	/**
@@ -763,6 +782,7 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 		} else {
 			if (is_null($databaseConnection)) {
 				$databaseConnection = $this->databaseConnections[$fallbackConnection];
+				$this->lastUsedDatabaseConnection = $databaseConnection;
 			}
 			return $databaseConnection->sql_query($query);
 		}
@@ -883,7 +903,7 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 	public function sql_pconnect($host = NULL, $username = NULL, $password = NULL) {
 		$result = true;
 		foreach($this->databaseConnections as $databaseConnection) { /** @var $databaseConnection \TYPO3\CMS\Core\Database\DatabaseConnection */
-			$result &= !is_null($databaseConnection->sql_pconnect($host, $username, $password));
+			$result = $result && !is_null($databaseConnection->sql_pconnect($host, $username, $password));
 		}
 
 		// note that parent implementation returns resource, but the signature denotes it should be a boolean (and that's how it's used in the core)
@@ -899,7 +919,7 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 	public function sql_select_db($TYPO3_db = NULL) {
 		$result = true;
 		foreach($this->databaseConnections as $databaseConnection) { /** @var $databaseConnection \TYPO3\CMS\Core\Database\DatabaseConnection */
-			$result &= $databaseConnection->sql_select_db($TYPO3_db);
+			$result = $result && $databaseConnection->sql_select_db($TYPO3_db);
 		}
 
 		return $result;
@@ -921,7 +941,8 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 	 * @throws \Exception
 	 */
 	public function admin_get_dbs() {
-		throw new \Exception("Extension ed_scale currently does not support admin_get_dbs() function. Please do not use TYPO3 install wizard.");
+		$databaseConnection = $this->getDefaultConnection();
+		return $databaseConnection->admin_get_dbs();
 	}
 
 	/**
@@ -1024,6 +1045,7 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 		} else {
 			if (is_null($databaseConnection)) {
 				$databaseConnection = $this->databaseConnections[$fallbackConnection];
+				$this->lastUsedDatabaseConnection = $databaseConnection;
 			}
 			return $databaseConnection->admin_query($query);
 		}
@@ -1036,13 +1058,38 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 	 ******************************/
 
 	/**
+	 * @return \TYPO3\CMS\Core\Database\DatabaseConnection
+	 */
+	protected function getDefaultConnection() {
+		if (defined('PHPUnit_MAIN_METHOD') && count($this->databaseConnections)>1) {
+			if (array_key_exists('DB_SCALE_PHPUNIT', $GLOBALS['TYPO3_CONF_VARS'])) {
+				$GLOBALS['TYPO3_CONF_VARS']['DB_SCALE'] = array('default' => $GLOBALS['TYPO3_CONF_VARS']['DB_SCALE_PHPUNIT']);
+			} else {
+				$GLOBALS['TYPO3_CONF_VARS']['DB_SCALE'] = array('default' => $this->configuration['default']);
+			}
+			$this->databaseConnections = array();
+			$this->tableNameToConfigurationNameCache = [
+				'r' => [],
+				'w' => []
+			];
+			$this->initialize();
+		}
+		$databaseConnection = $this->databaseConnections['default']; /** @var $databaseConnection \TYPO3\CMS\Core\Database\DatabaseConnection */
+		if (is_null($databaseConnection)) {
+			$this->initialize();
+			$databaseConnection = $this->databaseConnections['default'];
+		}
+		return $databaseConnection;
+	}
+
+	/**
 	 * Set database host
 	 *
 	 * @param string $host
 	 */
 	public function setDatabaseHost($host = 'localhost') {
-		$this->disconnectIfConnected();
-		$this->databaseHost = $host;
+		$databaseConnection = $this->getDefaultConnection();
+		$databaseConnection->setDatabaseHost($host);
 	}
 
 	/**
@@ -1051,8 +1098,8 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 	 * @param integer $port
 	 */
 	public function setDatabasePort($port = 3306) {
-		$this->disconnectIfConnected();
-		$this->databasePort = (int)$port;
+		$databaseConnection = $this->getDefaultConnection();
+		$databaseConnection->setDatabasePort($port);
 	}
 
 	/**
@@ -1061,8 +1108,8 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 	 * @param string|NULL $socket
 	 */
 	public function setDatabaseSocket($socket = NULL) {
-		$this->disconnectIfConnected();
-		$this->databaseSocket = $socket;
+		$databaseConnection = $this->getDefaultConnection();
+		$databaseConnection->setDatabaseSocket($socket);
 	}
 
 	/**
@@ -1071,8 +1118,8 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 	 * @param string $name
 	 */
 	public function setDatabaseName($name) {
-		$this->disconnectIfConnected();
-		$this->databaseName = $name;
+		$databaseConnection = $this->getDefaultConnection();
+		$databaseConnection->setDatabaseName($name);
 	}
 
 	/**
@@ -1081,8 +1128,8 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 	 * @param string $username
 	 */
 	public function setDatabaseUsername($username) {
-		$this->disconnectIfConnected();
-		$this->databaseUsername = $username;
+		$databaseConnection = $this->getDefaultConnection();
+		$databaseConnection->setDatabaseUsername($username);
 	}
 
 	/**
@@ -1091,8 +1138,8 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 	 * @param string $password
 	 */
 	public function setDatabasePassword($password) {
-		$this->disconnectIfConnected();
-		$this->databaseUserPassword = $password;
+		$databaseConnection = $this->getDefaultConnection();
+		$databaseConnection->setDatabasePassword($password);
 	}
 
 	/**
@@ -1102,8 +1149,9 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 	 * @see http://php.net/manual/de/mysqli.persistconns.php
 	 */
 	public function setPersistentDatabaseConnection($persistentDatabaseConnection) {
-		$this->disconnectIfConnected();
-		$this->persistentDatabaseConnection = (bool)$persistentDatabaseConnection;
+		foreach($this->databaseConnections as $databaseConnection) { /** @var $databaseConnection \TYPO3\CMS\Core\Database\DatabaseConnection */
+			$databaseConnection->setPersistentDatabaseConnection($persistentDatabaseConnection);
+		}
 	}
 
 	/**
@@ -1112,8 +1160,9 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 	 * @param bool $connectionCompression TRUE if connection should be compressed
 	 */
 	public function setConnectionCompression($connectionCompression) {
-		$this->disconnectIfConnected();
-		$this->connectionCompression = (bool)$connectionCompression;
+		foreach($this->databaseConnections as $databaseConnection) { /** @var $databaseConnection \TYPO3\CMS\Core\Database\DatabaseConnection */
+			$databaseConnection->setConnectionCompression($connectionCompression);
+		}
 	}
 
 	/**
@@ -1122,8 +1171,9 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 	 * @param array $commands List of SQL commands to be executed after connect
 	 */
 	public function setInitializeCommandsAfterConnect(array $commands) {
-		$this->disconnectIfConnected();
-		$this->initializeCommandsAfterConnect = $commands;
+		foreach($this->databaseConnections as $databaseConnection) { /** @var $databaseConnection \TYPO3\CMS\Core\Database\DatabaseConnection */
+			$databaseConnection->setInitializeCommandsAfterConnect($commands);
+		}
 	}
 
 	/**
@@ -1136,8 +1186,9 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 	 * @return void
 	 */
 	public function setConnectionCharset($connectionCharset = 'utf8') {
-		$this->disconnectIfConnected();
-		$this->connectionCharset = $connectionCharset;
+		foreach($this->databaseConnections as $databaseConnection) { /** @var $databaseConnection \TYPO3\CMS\Core\Database\DatabaseConnection */
+			$databaseConnection->setConnectionCharset($connectionCharset);
+		}
 	}
 
 	/**
@@ -1166,7 +1217,7 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 	public function isConnected() {
 		$result = true;
 		foreach($this->databaseConnections as $databaseConnection) { /** @var $databaseConnection \TYPO3\CMS\Core\Database\DatabaseConnection */
-			$result &= $databaseConnection->isConnected();
+			$result = $result && $databaseConnection->isConnected();
 		}
 		return $result;
 	}

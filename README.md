@@ -67,7 +67,24 @@ The configuration options are the same as for the default TYPO3 core's $GLOBALS[
 
 Configuration labeled 'default' should be put at the very end.
 
-## 2. SQL parsing
+## 2. PHPUnit support
+
+Extension should automatically detect PHPUnit context. In that case everything falls back to 'default' configuration. You can configure custom DB connection for PHPUnit in LocalConfiguration.php:
+
+```
+	'DB_SCALE_PHPUNIT' => array(
+		'allowedOperations' => 'rw',
+		'matchTablesPlain' => '*',
+		'database' => 'test_db',
+		'host' => 'localhost',
+		'password' => '...',
+		'username' => '...',
+	),
+```
+
+Please note that PHPUnit will automatically set the DB name (as 'default' DB name suffixed with '_test').
+
+## 3. SQL parsing
 
 In most of the cases SQL parsing is not needed. However, with complex queries extension needs to parse the SQL query in order to determine what DB connection should be used. There are 2 ways how this is performed:
 
@@ -93,10 +110,10 @@ $query->statement($sql);
 ...
 ```
 
-## 3. Limitations
+## 4. Limitations
 
 * SQL joins on tables across different MySQL database servers is not possible
 
-## 4. Support
+## 5. Support
 
 Please use github issue tracker to submit questions. Of course, feel free to fork and contribute.
