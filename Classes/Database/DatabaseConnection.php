@@ -158,7 +158,7 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 				if (array_key_exists('matchTablesPlain', $configuration)) {
 					$rules = GeneralUtility::trimExplode(',', $configuration['matchTablesPlain']);
 					foreach ($rules as $rule) {
-						if ($rule == $table || $rule = '*') {
+						if ($rule == $table || $rule == '*') {
 							$foundConfigurationName = $configurationName;
 							break;
 						}
