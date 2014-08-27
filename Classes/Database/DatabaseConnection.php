@@ -605,13 +605,28 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 	 *
 	 * @param string $query The query to execute
 	 * @param array $queryComponents The components of the query to execute
+	 * @param string $fallbackConnection
 	 * @return \mysqli_stmt|object MySQLi statement / DBAL object
 	 * @internal This method may only be called by \TYPO3\CMS\Core\Database\PreparedStatement
 	 */
-	public function prepare_PREPAREDquery($query, array $queryComponents) {
-		// @todo: check if this works
-		// this method seems to be not used in the core atm
-		return $this->lastUsedDatabaseConnection->prepare_PREPAREDquery($query, $queryComponents);
+	public function prepare_PREPAREDquery($query, array $queryComponents, $fallbackConnection = 'default') {
+		$runEverywhere = false;
+		$tables = $this->getTableNamesUsedInQuery($query, -1, $runEverywhere);
+		// @todo: should we maybe detect the type of query used (r or w)
+		$databaseConnection = $this->getDatabaseConnectionForTables($tables, 'r');
+		if ($runEverywhere) {
+			$result = null;
+			foreach($this->databaseConnections as $databaseConnection) { /** @var $databaseConnection \TYPO3\CMS\Core\Database\DatabaseConnection */
+				$result = $databaseConnection->prepare_PREPAREDquery($query, $queryComponents);
+			}
+			return $result;
+		} else {
+			if (is_null($databaseConnection)) {
+				$databaseConnection = $this->databaseConnections[$fallbackConnection];
+				$this->lastUsedDatabaseConnection = $databaseConnection;
+			}
+			return $databaseConnection->prepare_PREPAREDquery($query, $queryComponents);
+		}
 	}
 
 	/**************************************
