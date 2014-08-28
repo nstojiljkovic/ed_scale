@@ -149,6 +149,42 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 	 * @throws \Exception
 	 */
 	protected function getDatabaseConnectionNameForTable($table, $operation = 'r') {
+		$table = trim($table);
+		if (strstr($table, ' ') !== FALSE) {
+			// we got table with alias or join
+			// this should be the case with TYPO3 core calls, so lets assume
+			$tablesUsed = array();
+			$str = $table;
+			$i = 0;
+			while ($str) {
+				$matches = null;
+				if (preg_match('/^\(*([^\s]+)(\s+.*?\s+JOIN\s+)?([^\s]+)?(.*)/i', $str, $matches)) {
+					if ($i==0 && !in_array($matches[1], $tablesUsed)) {
+						$tablesUsed[] = $matches[1];
+					}
+					if ($matches[3] && !in_array($matches[3], $tablesUsed)) {
+						$tablesUsed[] = $matches[3];
+					}
+					// proceed only if we actually found some tables
+					$str = (($i==0 && $matches[1]) || $matches[3]) ? $matches[4] : '';
+					$i++;
+					continue;
+				}
+
+				break;
+			}
+			$result = '';
+			foreach ($tablesUsed as $i => $t) {
+				if ($i === 0) {
+					$result = $this->getDatabaseConnectionNameForTable($t, $operation);
+				} else {
+					if ($result !== $this->getDatabaseConnectionNameForTable($t, $operation)) {
+						throw new \Exception("Tables ".implode(', ', $tablesUsed)." are not configured to use the same database connection!");
+					}
+				}
+			}
+			return $result;
+		}
 		if (!array_key_exists($table, $this->tableNameToConfigurationNameCache[$operation])) {
 			$foundConfigurationName = '';
 			foreach ($this->configuration as $configurationName => $configuration) {
@@ -1309,4 +1345,4 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 		);
 	}
 
-} 
+}
