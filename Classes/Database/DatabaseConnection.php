@@ -145,7 +145,7 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 	/**
 	 * @param string $table
 	 * @param string $operation
-	 * @return $string
+	 * @return string
 	 * @throws \Exception
 	 */
 	protected function getDatabaseConnectionNameForTable($table, $operation = 'r') {
@@ -1104,6 +1104,29 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 
 	/******************************
 	 *
+	 * PHPUnit support
+	 *
+	 ******************************/
+
+	/**
+	 * @return void
+	 */
+	public function initializePHPUnitDBConnection() {
+		if (array_key_exists('DB_SCALE_PHPUNIT', $GLOBALS['TYPO3_CONF_VARS'])) {
+			$GLOBALS['TYPO3_CONF_VARS']['DB_SCALE'] = array('default' => $GLOBALS['TYPO3_CONF_VARS']['DB_SCALE_PHPUNIT']);
+		} else {
+			$GLOBALS['TYPO3_CONF_VARS']['DB_SCALE'] = array('default' => $this->configuration['default']);
+		}
+		$this->databaseConnections = array();
+		$this->tableNameToConfigurationNameCache = [
+			'r' => [],
+			'w' => []
+		];
+		$this->initialize();
+	}
+
+	/******************************
+	 *
 	 * Connect handling
 	 *
 	 ******************************/
@@ -1112,19 +1135,6 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 	 * @return \TYPO3\CMS\Core\Database\DatabaseConnection
 	 */
 	protected function getDefaultConnection() {
-		if (defined('PHPUnit_MAIN_METHOD') && count($this->databaseConnections)>1) {
-			if (array_key_exists('DB_SCALE_PHPUNIT', $GLOBALS['TYPO3_CONF_VARS'])) {
-				$GLOBALS['TYPO3_CONF_VARS']['DB_SCALE'] = array('default' => $GLOBALS['TYPO3_CONF_VARS']['DB_SCALE_PHPUNIT']);
-			} else {
-				$GLOBALS['TYPO3_CONF_VARS']['DB_SCALE'] = array('default' => $this->configuration['default']);
-			}
-			$this->databaseConnections = array();
-			$this->tableNameToConfigurationNameCache = [
-				'r' => [],
-				'w' => []
-			];
-			$this->initialize();
-		}
 		$databaseConnection = $this->databaseConnections['default']; /** @var $databaseConnection \TYPO3\CMS\Core\Database\DatabaseConnection */
 		if (is_null($databaseConnection)) {
 			$this->initialize();
