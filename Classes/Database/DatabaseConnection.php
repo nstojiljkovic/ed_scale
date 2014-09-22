@@ -1,5 +1,6 @@
 <?php
 namespace EssentialDots\EdScale\Database;
+use EssentialDots\EdScale\Database\Exception\MultipleConnectionsInQueryException;
 use PHPSQL\Parser;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 
@@ -134,7 +135,7 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 			if ($result === null) {
 				$result = $databaseConnection;
 			} elseif ($result !== $databaseConnection) {
-				throw new \Exception("Tables ".implode(', ', $tables)." are not configured to use the same database connection!");
+				throw new MultipleConnectionsInQueryException("Tables ".implode(', ', $tables)." are not configured to use the same database connection!");
 			}
 		}
 
@@ -150,28 +151,32 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 	 */
 	protected function getDatabaseConnectionNameForTable($table, $operation = 'r') {
 		$table = trim($table);
-		if (strstr($table, ' ') !== FALSE) {
+		if (strstr($table, ' ') !== FALSE || strstr($table, ',') !== FALSE) {
 			// we got table with alias or join
 			// this should be the case with TYPO3 core calls, so lets assume
 			$tablesUsed = array();
 			$str = $table;
 			$i = 0;
-			while ($str) {
-				$matches = null;
-				if (preg_match('/^\(*([^\s]+)(\s+.*?\s+JOIN\s+)?([^\s]+)?(.*)/i', $str, $matches)) {
-					if ($i==0 && !in_array($matches[1], $tablesUsed)) {
-						$tablesUsed[] = $matches[1];
+			if (strstr($table, ' ') === FALSE) {
+				$tablesUsed = explode(',', $table);
+			} else {
+				while ($str) {
+					$matches = null;
+					if (preg_match('/^\(*([^\s]+)(\s+.*?\s+JOIN\s+)?(\s*,?\s*)?([^\s]+)?(.*)/i', $str, $matches)) {
+						if ($i==0 && !in_array($matches[1], $tablesUsed)) {
+							$tablesUsed[] = $matches[1];
+						}
+						if ($matches[4] && !in_array($matches[4], $tablesUsed)) {
+							$tablesUsed[] = $matches[4];
+						}
+						// proceed only if we actually found some tables
+						$str = (($i==0 && $matches[1]) || $matches[4]) ? $matches[5] : '';
+						$i++;
+						continue;
 					}
-					if ($matches[3] && !in_array($matches[3], $tablesUsed)) {
-						$tablesUsed[] = $matches[3];
-					}
-					// proceed only if we actually found some tables
-					$str = (($i==0 && $matches[1]) || $matches[3]) ? $matches[4] : '';
-					$i++;
-					continue;
-				}
 
-				break;
+					break;
+				}
 			}
 			$result = '';
 			foreach ($tablesUsed as $i => $t) {
@@ -179,7 +184,7 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 					$result = $this->getDatabaseConnectionNameForTable($t, $operation);
 				} else {
 					if ($result !== $this->getDatabaseConnectionNameForTable($t, $operation)) {
-						throw new \Exception("Tables ".implode(', ', $tablesUsed)." are not configured to use the same database connection!");
+						throw new MultipleConnectionsInQueryException("Tables ".implode(', ', $tablesUsed)." are not configured to use the same database connection!");
 					}
 				}
 			}
