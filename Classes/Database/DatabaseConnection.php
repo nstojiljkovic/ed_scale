@@ -116,7 +116,7 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 	 * @param string $operation
 	 * @return \TYPO3\CMS\Core\Database\DatabaseConnection
 	 */
-	protected function getDatabaseConnectionForTable($table, $operation = 'r') {
+	public function getDatabaseConnectionForTable($table, $operation = 'r') {
 		$this->lastUsedDatabaseConnection = $this->databaseConnections[$this->getDatabaseConnectionNameForTable($table, $operation)];
 		return $this->lastUsedDatabaseConnection;
 	}
