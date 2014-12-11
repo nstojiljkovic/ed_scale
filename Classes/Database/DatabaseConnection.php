@@ -252,15 +252,17 @@ class DatabaseConnection extends \TYPO3\CMS\Core\Database\DatabaseConnection {
 			$parser = new Parser($query, false);
 
 			$tableNames = array();
-			$this->findTableNames($parser->parsed, $tableNames);
+			if (is_array($parser->parsed)) {
+				$this->findTableNames($parser->parsed, $tableNames);
 
-			if ($limit > 0) {
-				$tableNames = array_slice($tableNames, 0, $limit);
-			}
+				if ($limit > 0) {
+					$tableNames = array_slice($tableNames, 0, $limit);
+				}
 
-			if (count($tableNames)==0) {
-				if (array_key_exists('SET', $parser->parsed)) {
-					$runEverywhere = true;
+				if (count($tableNames)==0) {
+					if (array_key_exists('SET', $parser->parsed)) {
+						$runEverywhere = true;
+					}
 				}
 			}
 
